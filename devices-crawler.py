@@ -4,6 +4,7 @@ import re
 import sys
 import urllib
 import urllib2
+import multiprocessing as mp
 
 def getDeviceFromSMAUG(url):
 	# Have to specify a User-Agent so that it doesn't return a 403 Forbidden
@@ -69,10 +70,26 @@ def printValues(SMAUG_dict, ATLAS_dict):
 	print 'SMAUG:' + str(map(lambda x: (x[0], '%.2f%%' % (x[1] * 100.0 / SMAUG_total)), SMAUG_dict.items()))
 	print 'ATLAS:' + str(map(lambda x: (x[0], '%.2f%%' % (x[1] * 100.0 / ATLAS_total)), ATLAS_dict.items()))
 
+def printDicts(dicts):
+	while not dicts.empty():
+		d = dicts.get()
+		total = 0
+		
+		for v in d[1].values():
+			total += v
 
-def processFile(log, SMAUG_dict, ATLAS_dict):
+		print d[0] + ': ' + str(map(lambda x: (x[0], '%.2f%%' % (x[1] * 100.0 / total)), d[1].items()))
 
-	for line in log:
+
+def processFile(file_name, output):
+	# Open a file
+	file = open(file_name, "r")
+	print "Name of the file: ", file.name
+
+	SMAUG_dict = dict()
+	ATLAS_dict = dict()
+
+	for line in file:
 		try:
 			match = re.match('.*(http:\/\/.*)\ HTTP.*', line)
 			if match is not None:
@@ -95,8 +112,24 @@ def processFile(log, SMAUG_dict, ATLAS_dict):
 			else:
 				printX()
 
+		except KeyboardInterrupt, e:
+			printNewLine()
+			print 'Execution stopped!'
+			break
 		except Exception, e:
 			printX()
+	
+	file.close()
+	output.put(('SMAUG', SMAUG_dict))
+	output.put(('ATLAS', ATLAS_dict))
+
+
+class FileProcessor:
+	def __init__(self, file_name):
+		self.output = mp.Queue()
+		self.file_name = file_name
+
+		self.process = mp.Process(target = processFile, args = (self.file_name, self.output))
 
 
 def main():
@@ -106,29 +139,26 @@ def main():
 		try:
 			files = sys.argv[1:]
 
-			SMAUG_dict = dict()
-			ATLAS_dict = dict()
+			processors = []
 			total = 0
 
 			for f in files:
-				# Open a file
-				log = open(f, "r")
-				print "Name of the file: ", log.name
+				processors.append(FileProcessor(f))
 
-				processFile(log, SMAUG_dict, ATLAS_dict)
+			for p in processors:
+				p.process.start()			
 
-		except KeyboardInterrupt:
-			printNewLine()
-			print 'Execution stopped!'
+			for p in processors:
+				p.process.join()
+
 		except Exception, e:
-			print e
+			print 'Que paso? ' + e
 
 		finally:
 			printNewLine()
-			printValues(SMAUG_dict, ATLAS_dict)
 
-			# Close opend file
-			log.close()
+			for p in processors:
+				printDicts(p.output)
 
 
 if __name__ == main():
