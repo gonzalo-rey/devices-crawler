@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import os
 import re
 import sys
 import urllib
@@ -57,30 +58,15 @@ def printNewLine():
 	sys.stdout.flush()
 
 
-def printValues(SMAUG_dict, ATLAS_dict):
-	SMAUG_total = 0
-	ATLAS_total = 0
-
-	for v in SMAUG_dict.values():
-		SMAUG_total += v
-
-	for v in ATLAS_dict.values():
-		ATLAS_total += v
-
-	print 'SMAUG:' + str(map(lambda x: (x[0], '%.2f%%' % (x[1] * 100.0 / SMAUG_total)), SMAUG_dict.items()))
-	print 'ATLAS:' + str(map(lambda x: (x[0], '%.2f%%' % (x[1] * 100.0 / ATLAS_total)), ATLAS_dict.items()))
-
-
-def printDict(name, dict):
-	total = 0
-	for v in dict.values():
-		total += v
-
+def printDict(name, dict, total):
 	print name + ' ' + str(map(lambda x: (x[0], '%.2f%%' % (x[1] * 100.0 / total)), dict.items()))
 
 
 def mergeDicts(dicts):
-	return mergeDictsAux(dicts.pop(), dicts)
+	if len(dicts) == 0:
+		return dicts
+	else: 
+		return mergeDictsAux(dicts.pop(), dicts)
 
 
 def mergeDictsAux(head, tail):
@@ -104,9 +90,17 @@ def printDicts(processors):
 		while not p.output.empty():
 			d = p.output.get()
 			result_dict[d[0]].append(d[1])
-			
-	printDict('ATLAS', mergeDicts(result_dict['ATLAS']))
-	printDict('SMAUG', mergeDicts(result_dict['SMAUG']))
+
+	ATLAS_merged = mergeDicts(result_dict['ATLAS'])
+	SMAUG_merged = mergeDicts(result_dict['SMAUG'])
+
+	total = 0
+	for v in ATLAS_merged.values():
+		total += v
+	
+	printDict('ATLAS:', ATLAS_merged, total)
+	printDict('SMAUG:', SMAUG_merged, total)
+	print 'Total devices:' + str(total)
 
 
 def processFile(file_name, output):
@@ -160,18 +154,27 @@ class FileProcessor:
 		self.process = mp.Process(target = processFile, args = (self.file_name, self.output))
 
 
+def processDir(dir):
+	dir_aux = (dir + '/' if dir[-1:] != '/' else dir)
+	file_names = [ dir_aux + f for f in os.listdir(dir_aux) if os.path.isfile(dir_aux + f) ]
+	return [ FileProcessor(f) for f in file_names ]
+
+
 def main():
 	if(len(sys.argv) < 2):
-		print 'Provide at least one log to analyse, i.e. ./devices-crawler.py file1.log [file2.log [...]]'
+		print 'Provide a least one file directory with several ones to analyse, i.e. ./devices-crawler.py file1|dir1 [file2|dir2 [...]]'
 	else:
 		try:
-			files = sys.argv[1:]
+			file_paths = sys.argv[1:]
 
 			processors = []
 			total = 0
 
-			for f in files:
-				processors.append(FileProcessor(f))
+			for fp in file_paths:
+				if os.path.isdir(fp):
+					processors += processDir(fp)
+				else:
+					processors.append(FileProcessor(fp))
 
 			for p in processors:
 				p.process.start()			
@@ -180,7 +183,7 @@ def main():
 				p.process.join()
 
 		except Exception, e:
-			print 'Que paso? ' + e
+			print 'Que paso? ' + str(e)
 
 		finally:
 			printNewLine()
