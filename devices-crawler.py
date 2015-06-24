@@ -70,15 +70,43 @@ def printValues(SMAUG_dict, ATLAS_dict):
 	print 'SMAUG:' + str(map(lambda x: (x[0], '%.2f%%' % (x[1] * 100.0 / SMAUG_total)), SMAUG_dict.items()))
 	print 'ATLAS:' + str(map(lambda x: (x[0], '%.2f%%' % (x[1] * 100.0 / ATLAS_total)), ATLAS_dict.items()))
 
-def printDicts(dicts):
-	while not dicts.empty():
-		d = dicts.get()
-		total = 0
-		
-		for v in d[1].values():
-			total += v
 
-		print d[0] + ': ' + str(map(lambda x: (x[0], '%.2f%%' % (x[1] * 100.0 / total)), d[1].items()))
+def printDict(name, dict):
+	total = 0
+	for v in dict.values():
+		total += v
+
+	print name + ' ' + str(map(lambda x: (x[0], '%.2f%%' % (x[1] * 100.0 / total)), dict.items()))
+
+
+def mergeDicts(dicts):
+	return mergeDictsAux(dicts.pop(), dicts)
+
+
+def mergeDictsAux(head, tail):
+	if len(tail) == 0:
+		return head
+	else:
+		p = tail.pop()
+		for v in p.items():
+			if v[0] in head:
+				head[v[0]] += v[1]
+			else:
+				head[v[0]] = v[1]
+
+		return mergeDictsAux(head, tail)
+
+
+def printDicts(processors):
+	result_dict = {'SMAUG':[], 'ATLAS':[]}
+
+	for p in processors:
+		while not p.output.empty():
+			d = p.output.get()
+			result_dict[d[0]].append(d[1])
+			
+	printDict('ATLAS', mergeDicts(result_dict['ATLAS']))
+	printDict('SMAUG', mergeDicts(result_dict['SMAUG']))
 
 
 def processFile(file_name, output):
@@ -156,9 +184,7 @@ def main():
 
 		finally:
 			printNewLine()
-
-			for p in processors:
-				printDicts(p.output)
+			printDicts(processors)
 
 
 if __name__ == main():
